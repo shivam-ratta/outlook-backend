@@ -2,6 +2,7 @@ const express = require('express');
 const axios = require('axios');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 require('dotenv').config();
+const { credentials } = require('./application-credentials')
 
 const app = express();
 app.use(function (req, res, next) {
@@ -37,23 +38,33 @@ const apiProxy = createProxyMiddleware('/oauth/token', {
 app.use('/oauth/token', apiProxy);
 
 // Route to handle the equivalent of your cURL request
-app.get('/login', async (req, res) => {
-  try {
-    const response = await axios.post(
-      `https://login.microsoftonline.com/${process.env.TENANT_ID}/oauth2/v2.0/token`,
-      `client_id=${process.env.CLIENT_ID}&scope=https://graph.microsoft.com/.default&client_secret=${process.env.CLIENT_SECRET}&grant_type=client_credentials`,
-      {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-      }
-    );
+app.get('/login', (req, res) => {
+  let access_tokens = [];
+  const tokenRequests = credentials.map(async (client) => {
+    try {
+        const response = await axios.post(
+          `https://login.microsoftonline.com/${client.TENANT_ID}/oauth2/v2.0/token`,
+          `client_id=${client.CLIENT_ID}&scope=https://graph.microsoft.com/.default&client_secret=${client.CLIENT_SECRET}&grant_type=client_credentials`,
+          {
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+          }
+        );
+        access_tokens.push(response.data.access_token)
+    } catch (error) {
+      console.error('Error fetching access token:', error.message);
+      res.status(500).send(error);
+    }
+  });
 
-    res.status(200).json(response.data);
-  } catch (error) {
-    console.error('Error fetching access token:', error.message);
-    res.status(500).send(error);
-  }
+  Promise.all(tokenRequests)
+  .then(() => {
+    res.status(200).json({ access_tokens: access_tokens });
+  })
+  .catch((err) => {
+    res.status(500).json({ error: err.message });
+  });
 });
 
 // Start the Express server
