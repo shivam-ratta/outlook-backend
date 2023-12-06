@@ -2,7 +2,7 @@ const express = require('express');
 const axios = require('axios');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 require('dotenv').config();
-const { credentials } = require('./application-credentials')
+const bodyParser = require('body-parser');
 
 const app = express();
 app.use(function (req, res, next) {
@@ -36,9 +36,11 @@ const apiProxy = createProxyMiddleware('/oauth/token', {
 
 // Use the proxy middleware for your API endpoint
 app.use('/oauth/token', apiProxy);
+app.use(bodyParser.json());
 
 // Route to handle the equivalent of your cURL request
-app.get('/login', (req, res) => {
+app.post('/login', (req, res) => {
+  const { credentials } = req.body;
   let access_tokens = [];
   const tokenRequests = credentials.map(async (client) => {
     try {
